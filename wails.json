@@ -9,5 +9,12 @@
   "author": {
     "name": "Pedro Faria",
     "email": "eu@eusouopedro.com"
+  },
+  "Info": {
+    "companyName": "Eu sou o Pedro Corp.",
+    "productName": "Vendinha",
+    "productVersion": "1.0.0",
+    "copyright": "Copyright.........",
+    "comments": "Built using Wails (https://wails.io)"
   }
 }
