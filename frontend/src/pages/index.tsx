@@ -50,6 +50,13 @@ const Index = () => {
         })
     }
 
+    const sortFunc = (a: model.Product, b: model.Product): number => {
+        const aLbl = `${a.Order} - ` + ((a.Key != "") ? `${a.Key} - ` : "") + `${a.Code} (${Format(a.Price)})}`
+        const bLbl = `${b.Order} - ` + ((b.Key != "") ? `${b.Key} - ` : "") + `${b.Code} (${Format(b.Price)})}`
+
+        return aLbl > bLbl ? 1 : -1
+    }
+
     const newPurchase = () => {
         const purchase = new model.Purchase({ Products: [] });
         console.log(purchase)
@@ -156,7 +163,7 @@ const Index = () => {
             <Box>
                 <Grid container spacing={2}>
                     <Grid item xs={4}>
-                        {purchase && products.map((row, idx) => (
+                        {purchase && products.sort(sortFunc).map((row, idx) => (
                             <Button
                                 color="success"
                                 variant="outlined"

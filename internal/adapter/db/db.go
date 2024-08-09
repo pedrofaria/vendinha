@@ -17,7 +17,7 @@ func Connect() error {
 	}
 
 	// Migrate the schema
-	if err := db.AutoMigrate(&model.Product{}); err != nil {
+	if err := db.AutoMigrate(&model.Product{}, &model.PurchaseItem{}, &model.Purchase{}); err != nil {
 		return err
 	}
 
