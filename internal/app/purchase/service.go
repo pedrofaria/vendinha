@@ -42,7 +42,7 @@ func (s *Service) printRecipe(purchase model.Purchase) error {
 	ts := time.Now()
 
 	fmt.Fprintln(p, "--------------------------------")
-	fmt.Fprintln(p, "-     CEJV - Festa Country     -")
+	fmt.Fprintln(p, "-   CEJV - Feira das Nacoes    -")
 	fmt.Fprintf(p, "-     %s      -\n", ts.Format(time.DateTime))
 	fmt.Fprintln(p, "--------------------------------")
 	fmt.Fprintf(p, "** Pedido Nr.: %05d \n", purchase.ID)

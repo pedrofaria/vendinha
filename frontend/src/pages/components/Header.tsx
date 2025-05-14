@@ -13,7 +13,7 @@ export default function Header() {
 
     return (
         <header>
-            <AppBar position="relative">
+            <AppBar component={'nav'}>
                 <Toolbar>
                     <ShoppingBagIcon sx={{ mr: 2 }} />
                     <Typography variant="h6" color="inherit" noWrap>
@@ -27,6 +27,7 @@ export default function Header() {
                     </Box>
                 </Toolbar>
             </AppBar>
+            <Toolbar />
         </header>
     )
 }

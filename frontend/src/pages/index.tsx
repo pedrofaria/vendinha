@@ -150,40 +150,52 @@ const Index = () => {
 
     return (
         // <div>aeeee</div>
-        <Container>
-            <Box sx={{ my: 4 }}>
-                <Box>
-                    <Button variant="contained" onClick={newPurchase}>
-                        Nova Venda
-                    </Button>
-
-                </Box>
-            </Box>
-
+        <Container maxWidth="xl">
             <Box>
-                <Grid container spacing={2}>
-                    <Grid item xs={4}>
-                        {purchase && products.sort(sortFunc).map((row, idx) => (
-                            <Button
-                                color="success"
-                                variant="outlined"
-                                onClick={() => addItem(row)}
-                                key={row.ID}
-                                style={{ display: 'block', marginBottom: 10 }}>
+                <Grid container spacing={3}>
+                    <Grid item xs={6}>
 
-                                {(row.Key != "") ? `${row.Key} - ` : ""}
-                                {row.Code} ({Format(row.Price)})
-                            </Button>
-                        ))}
+                        <Box sx={{ my: 4 }}>
+                            <Box>
+                                <Button variant="contained" onClick={newPurchase}>
+                                    Nova Venda
+                                </Button>
+
+                            </Box>
+                        </Box>
+
+                        <Grid container spacing={2}>
+                            {purchase && products.sort(sortFunc).map((row, idx) => (
+                                <Grid item xs={6}>
+                                    <Button
+                                        color="success"
+                                        variant="contained"
+                                        onClick={() => addItem(row)}
+                                        key={row.ID}
+                                        style={{
+                                            display: 'block', marginBottom: 10,
+                                            textAlign: 'left', width: '100%',
+                                        }}>
+
+                                        {(row.Key != "") ? `${row.Key} - ` : ""}
+                                        {row.Code}<br />
+                                        {Format(row.Price)}
+                                    </Button>
+                                </Grid>
+                            ))}
+                        </Grid>
+
                     </Grid>
-                    <Grid item xs={8}>
+
+                    <Grid item xs={6}>
                         <Box>
                             {purchase ? (<>
-                                <Box sx={{ paddingY: 3 }}>
-                                    <Typography variant='h5' sx={{ marginTop: 0, paddingTop: 0 }}>
+                                <Paper sx={{ padding: 3, marginY: 3, bgcolor: '#90a4ae' }} elevation={4}>
+                                    <Typography variant='h5'>
                                         Total: {Format(calcTotal())}
                                     </Typography>
-                                </Box>
+                                </Paper>
+
                                 <Box>
                                     <TableContainer component={Paper}>
                                         <Table size="small" aria-label="simple table">
