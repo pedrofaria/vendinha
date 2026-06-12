@@ -6,14 +6,17 @@ import (
 	"strings"
 	"time"
 	"vendinha/internal/adapter/db"
-	"vendinha/internal/service/print"
 )
 
-type Service struct {
-	printSrv *print.Service
+type Printer interface {
+	Print(data []byte) error
 }
 
-func NewService(printSrv *print.Service) *Service {
+type Service struct {
+	printSrv Printer
+}
+
+func NewService(printSrv Printer) *Service {
 	return &Service{printSrv: printSrv}
 }
 

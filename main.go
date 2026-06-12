@@ -16,9 +16,16 @@ import (
 var assets embed.FS
 
 func main() {
+	var printSrv report.Printer
+
 	// Create an instance of the app structure
 	app := NewApp()
-	printSrv := print.NewService()
+	if IsDev {
+		printSrv = print.NewDebugService()
+	} else {
+		printSrv = print.NewService()
+	}
+
 	productApp := product.NewService()
 	purchaseApp := purchase.NewService(printSrv)
 	reportApp := report.NewService(printSrv)

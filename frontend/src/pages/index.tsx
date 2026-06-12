@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import Container from '@mui/material/Container';
 import Box from '@mui/material/Box';
 import { List } from '../../wailsjs/go/product/Service';
-import { PlacePurchase } from '../../wailsjs/go/purchase/Service';
+import { PlacePurchase, PlaceCartelaPurchase } from '../../wailsjs/go/purchase/Service';
 import { model } from '../../wailsjs/go/models';
 import { Button, Grid, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material';
 import IconButton from '@mui/material/IconButton';
@@ -15,6 +15,14 @@ import useEventListener from '@use-it/event-listener';
 const Index = () => {
     const [products, setProducts] = useState(Array<model.Product>);
     const [purchase, setPurchase] = useState<model.Purchase>();
+    const [showCartelas, setShowCartelas] = useState<boolean>(false);
+
+    const cartelas = [
+        new model.Product({ ID: 999999100, Code: 'CARTELA 100', Price: 10000, Order: 1 }),
+        new model.Product({ ID: 99999950, Code: 'CARTELA 50', Price: 5000, Order: 2 }),
+        new model.Product({ ID: 99999920, Code: 'CARTELA 20', Price: 2000, Order: 3 }),
+        new model.Product({ ID: 99999910, Code: 'CARTELA 10', Price: 1000, Order: 4 }),
+    ];
 
     const handleKeyDown = (ev: any) => {
         if (purchase == null) {
@@ -134,13 +142,28 @@ const Index = () => {
             return;
         }
 
+        if (showCartelas) {
+            PlaceCartelaPurchase(purchase)
+                .then(() => {
+                    newPurchase();
+                })
+                .catch((err) => {
+                    window.alert(err);
+                });
+            return;
+        }
+
         PlacePurchase(purchase)
             .then(() => {
-                // newPurchase();
+                newPurchase();
             })
             .catch((err) => {
                 window.alert(err);
             });
+    }
+
+    const buyCartela = () => {
+        setShowCartelas(!showCartelas);
     }
 
     useEffect(() => {
@@ -161,11 +184,14 @@ const Index = () => {
                                     Nova Venda
                                 </Button>
 
+                                <Button variant="contained" onClick={buyCartela} sx={{ marginLeft: 5 }}>
+                                    Cartelas
+                                </Button>
                             </Box>
                         </Box>
 
                         <Grid container spacing={2}>
-                            {purchase && products.sort(sortFunc).map((row, idx) => (
+                            {!showCartelas && purchase && products.sort(sortFunc).map((row, idx) => (
                                 <Grid item xs={6}>
                                     <Button
                                         color="success"
@@ -183,6 +209,24 @@ const Index = () => {
                                     </Button>
                                 </Grid>
                             ))}
+
+                            {showCartelas && cartelas && cartelas.sort(sortFunc).map((row, idx) => (
+                                <Grid item xs={6}>
+                                    <Button
+                                        color="warning"
+                                        variant="contained"
+                                        onClick={() => addItem(row)}
+                                        key={row.ID}
+                                        style={{
+                                            display: 'block', marginBottom: 10,
+                                            textAlign: 'left', width: '100%',
+                                        }}>
+
+                                        {row.Code}<br />
+                                        {Format(row.Price)}
+                                    </Button>
+                                </Grid>
+                            ))}
                         </Grid>
 
                     </Grid>
@@ -195,6 +239,12 @@ const Index = () => {
                                         Total: {Format(calcTotal())}
                                     </Typography>
                                 </Paper>
+
+                                <Box sx={{ marginBottom: 3 }}>
+                                    <Button variant="contained" onClick={placePurchase} sx={{ marginRight: 2 }}>
+                                        Print
+                                    </Button>
+                                </Box>
 
                                 <Box>
                                     <TableContainer component={Paper}>
@@ -235,18 +285,14 @@ const Index = () => {
                                         </Table>
                                     </TableContainer>
                                 </Box>
-                                <Box>
-                                    <Button variant="contained" onClick={placePurchase} sx={{ marginTop: 2 }}>
-                                        Print
-                                    </Button>
-                                </Box>
+
                             </>) : ""}
                         </Box>
                     </Grid>
                 </Grid>
 
             </Box>
-        </Container>
+        </Container >
     )
 }
 
