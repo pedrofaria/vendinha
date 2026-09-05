@@ -1,0 +1,11 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+
+/* Fundo padrão da app (aplicado no html/body), herda as cores do tema. */
+html, body, #app {
+  height: 100%;
+}
+
+body {
+  @apply bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100;
+}
