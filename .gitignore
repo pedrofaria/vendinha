@@ -1,3 +1,13 @@
+# Wails / Go
 build/bin
+Vendinha.exe
+*.exe
+
+# Node / Vite
 node_modules
 frontend/dist
+
+# Gerados pelo unplugin do Nuxt UI a cada build/dev
+frontend/auto-imports.d.ts
+frontend/components.d.ts
+frontend/package.json.md5
