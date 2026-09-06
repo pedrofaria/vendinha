@@ -1,9 +1,19 @@
+[Support me](https://donatr.ee/pedrofaria)
+
+<!-- GitHub badge -->
+[![Support Pedro Faria](https://img.shields.io/badge/Donate-donatr.ee-6C5CE7?style=for-the-badge)](https://donatr.ee/pedrofaria)
+
 # Vendinha
 
 Ponto de venda (PDV) para eventos, em **pt-BR**. Para cada evento você cadastra
 produtos — com estoque **infinito** ou **limitado** — e faz vendas em uma tela
 touch-friendly. Suporta três formas de pagamento (dinheiro, cartão e **"anota
 aí"**, o fiado) e, por evento, a venda de **cartelas** (raspadinha).
+
+<p align="center">
+  <img src="build/appicon.png" alt="Vendinha" width="160">
+</p>
+
 
 > O app é um aplicativo **desktop** Wails. A impressão em **térmica MTP II**
 > ainda **não está implementada** — por ora a ficha/recibo só é exibida numa
