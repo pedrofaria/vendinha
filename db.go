@@ -74,6 +74,13 @@ CREATE TABLE IF NOT EXISTS pedido_itens (
 	qtd            INTEGER NOT NULL,
 	subtotal       INTEGER NOT NULL
 );
+
+-- Preferências do app (impressora, largura da linha, ...). Chave/valor.
+-- Fica DENTRO do banco (backup único) e NÃO é apagada pelo "Zerar banco".
+CREATE TABLE IF NOT EXISTS config (
+	chave TEXT PRIMARY KEY,
+	valor TEXT
+);
 `
 
 // openDB abre o banco SQLite em path (":memory:" ou arquivo), aplicando PRAGMAs.
@@ -96,31 +103,63 @@ func openDB(path string) (*sql.DB, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
-	// Bancos criados antes das colunas de grupo/ordem ganham-nas aqui.
-	// Sem sistema de migração: verifica PRAGMA table_info e faz ALTER quando falta.
-	if err := migrateProdutos(db); err != nil {
-		db.Close()
-		return nil, err
-	}
-	// Bancos antigos não têm vende_cartela (eventos) nem cartela_reais
-	// (pedido_itens). Adiciona via ALTER quando faltam.
-	if err := migrateVendeCartela(db); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err := migrateAnotaAi(db); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err := migrateQuitadoPedido(db); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err := migrateCanceladoPedido(db); err != nil {
+	if err := applyMigrations(db); err != nil {
 		db.Close()
 		return nil, err
 	}
 	return db, nil
+}
+
+// applyMigrations garante colunas/índices adicionados depois da 1ª versão do
+// schema em bancos já existentes (idempotente). Centraliza a sequência para
+// ser reutilizada tanto na abertura quanto no zerar o banco.
+func applyMigrations(db *sql.DB) error {
+	// Bancos criados antes das colunas de grupo/ordem ganham-nas aqui.
+	// Sem sistema de migração: verifica PRAGMA table_info e faz ALTER quando falta.
+	if err := migrateProdutos(db); err != nil {
+		return err
+	}
+	// Bancos antigos não têm vende_cartela (eventos) nem cartela_reais
+	// (pedido_itens). Adiciona via ALTER quando faltam.
+	if err := migrateVendeCartela(db); err != nil {
+		return err
+	}
+	if err := migrateAnotaAi(db); err != nil {
+		return err
+	}
+	if err := migrateQuitadoPedido(db); err != nil {
+		return err
+	}
+	if err := migrateCanceladoPedido(db); err != nil {
+		return err
+	}
+	return nil
+}
+
+// zeroBanco apaga TODO o conteúdo do banco (eventos, grupos, produtos, contas,
+// pedidos e itens) e o recria do zero pelo schema — os AUTOINCREMENT voltam a
+// contar de 1 e um VACUUM devolve o espaço (o arquivo realmente "zera").
+// Não roda dentro de uma transação porque DROP + VACUUM não podem ser
+// transacionados; se algo falhar no meio, o schema (CREATE IF NOT EXISTS) se
+// auto-recupera na próxima abertura do app. Os DROPs seguem a ordem filhos →
+// pais para respeitar as foreign keys ativas.
+func zeroBanco(db *sql.DB) error {
+	tables := []string{"pedido_itens", "pedidos", "produtos", "grupos", "contas", "eventos"}
+	for _, t := range tables {
+		if _, err := db.Exec("DROP TABLE IF EXISTS " + t); err != nil {
+			return fmt.Errorf("zerar banco (drop %s): %w", t, err)
+		}
+	}
+	if _, err := db.Exec(schema); err != nil {
+		return fmt.Errorf("zerar banco (schema): %w", err)
+	}
+	if err := applyMigrations(db); err != nil {
+		return fmt.Errorf("zerar banco (migrações): %w", err)
+	}
+	if _, err := db.Exec("VACUUM"); err != nil {
+		return fmt.Errorf("zerar banco (vacuum): %w", err)
+	}
+	return nil
 }
 
 // ensureColumn adiciona uma coluna em `table` via ALTER TABLE se ainda não existir.

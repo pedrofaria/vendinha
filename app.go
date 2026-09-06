@@ -37,6 +37,8 @@ func (a *App) startup(ctx context.Context) {
 	}
 	a.db = db
 	a.repo = NewRepo(db)
+	// Migra preferências do antigo config.json (se houver) para a tabela config.
+	_ = importaConfigJsonLegado(db)
 }
 
 // Greet kept from template (harmless), remove later if unused.
