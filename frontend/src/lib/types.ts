@@ -92,6 +92,7 @@ export interface ResumoEvento {
   receitaTotal: number // soma dos totais dos pedidos fechados (centavos)
   numPedidos: number // nº de vendas fechadas
   numProdutosVendidos: number // unidades de produto vendidas (sem cartelas)
+  vendasInicioHora: number // hora (0-23) em que o eixo do gráfico começa (virada de meia-noite)
   vendasPorHora: HoraVendas[] // histograma por hora do dia (0-23)
 }
 
@@ -144,4 +145,13 @@ export interface ListaPedidos {
   total: number
   pagina: number
   totalPaginas: number
+}
+
+// Impressoras disponíveis no SO + a selecionada para imprimir (tela
+// Configurações). padrao = impressora padrão do Windows; selecionada = a salva
+// no config.json ou, sem nada salvo, a padrão do sistema.
+export interface ImpressorasInfo {
+  nomes: string[]
+  padrao: string
+  selecionada: string
 }

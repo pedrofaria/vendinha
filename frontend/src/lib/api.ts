@@ -1,4 +1,4 @@
-import type { Cartela, Conta, ContaSaldo, Evento, Grupo, GrupoProdutos, GrupoVenda, ListaPedidos, Pedido, PedidoItem, Produto, ResumoEvento } from './types'
+import type { Cartela, Conta, ContaSaldo, Evento, Grupo, GrupoProdutos, GrupoVenda, ImpressorasInfo, ListaPedidos, Pedido, PedidoItem, Produto, ResumoEvento } from './types'
 
 // Tipagem do objeto injetado pelo Wails no window.
 declare global {
@@ -11,6 +11,7 @@ declare global {
           CreateEvento(nome: string, vendeCartela: boolean): Promise<Evento>
           UpdateEvento(id: number, nome: string, ativo: boolean, vendeCartela: boolean): Promise<void>
           DeleteEvento(id: number): Promise<void>
+          ClonarEvento(id: number): Promise<Evento>
           ListCartelas(): Promise<Cartela[]>
           ListGrupos(eventoID: number): Promise<Grupo[]>
           CreateGrupo(eventoID: number, nome: string, cor: string): Promise<Grupo>
@@ -36,6 +37,16 @@ declare global {
           QuitarConta(contaID: number): Promise<void>
           ListPedidosConta(contaID: number): Promise<Pedido[]>
           ResumoEvento(eventoID: number): Promise<ResumoEvento>
+          GetDBPath(): Promise<string>
+          OpenDBFolder(): Promise<void>
+          ZerarBanco(): Promise<void>
+          ListImpressoras(): Promise<ImpressorasInfo>
+          SetImpressora(nome: string): Promise<void>
+          GetLarguraLinha(): Promise<number>
+          SetLarguraLinha(n: number): Promise<void>
+          GetModoDebug(): Promise<boolean>
+          SetModoDebug(ligado: boolean): Promise<void>
+          ImprimirTexto(texto: string): Promise<void>
         }
       }
     }

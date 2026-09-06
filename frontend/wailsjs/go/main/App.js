@@ -6,6 +6,10 @@ export function CancelarPedido(arg1) {
   return window['go']['main']['App']['CancelarPedido'](arg1);
 }
 
+export function ClonarEvento(arg1) {
+  return window['go']['main']['App']['ClonarEvento'](arg1);
+}
+
 export function CreateEvento(arg1, arg2) {
   return window['go']['main']['App']['CreateEvento'](arg1, arg2);
 }
@@ -38,12 +42,28 @@ export function FecharPedido(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['FecharPedido'](arg1, arg2, arg3, arg4);
 }
 
+export function GetDBPath() {
+  return window['go']['main']['App']['GetDBPath']();
+}
+
+export function GetLarguraLinha() {
+  return window['go']['main']['App']['GetLarguraLinha']();
+}
+
+export function GetModoDebug() {
+  return window['go']['main']['App']['GetModoDebug']();
+}
+
 export function GetPedido(arg1) {
   return window['go']['main']['App']['GetPedido'](arg1);
 }
 
 export function Greet(arg1) {
   return window['go']['main']['App']['Greet'](arg1);
+}
+
+export function ImprimirTexto(arg1) {
+  return window['go']['main']['App']['ImprimirTexto'](arg1);
 }
 
 export function ListCartelas() {
@@ -64,6 +84,10 @@ export function ListEventos() {
 
 export function ListGrupos(arg1) {
   return window['go']['main']['App']['ListGrupos'](arg1);
+}
+
+export function ListImpressoras() {
+  return window['go']['main']['App']['ListImpressoras']();
 }
 
 export function ListPedidos(arg1, arg2, arg3, arg4) {
@@ -90,6 +114,10 @@ export function MoverProduto(arg1, arg2) {
   return window['go']['main']['App']['MoverProduto'](arg1, arg2);
 }
 
+export function OpenDBFolder() {
+  return window['go']['main']['App']['OpenDBFolder']();
+}
+
 export function QuitarConta(arg1) {
   return window['go']['main']['App']['QuitarConta'](arg1);
 }
@@ -106,6 +134,18 @@ export function ResumoEvento(arg1) {
   return window['go']['main']['App']['ResumoEvento'](arg1);
 }
 
+export function SetImpressora(arg1) {
+  return window['go']['main']['App']['SetImpressora'](arg1);
+}
+
+export function SetLarguraLinha(arg1) {
+  return window['go']['main']['App']['SetLarguraLinha'](arg1);
+}
+
+export function SetModoDebug(arg1) {
+  return window['go']['main']['App']['SetModoDebug'](arg1);
+}
+
 export function SetProdutoAtivo(arg1, arg2) {
   return window['go']['main']['App']['SetProdutoAtivo'](arg1, arg2);
 }
@@ -120,4 +160,8 @@ export function UpdateGrupo(arg1, arg2, arg3) {
 
 export function UpdateProduto(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
   return window['go']['main']['App']['UpdateProduto'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
+}
+
+export function ZerarBanco() {
+  return window['go']['main']['App']['ZerarBanco']();
 }

@@ -4,6 +4,8 @@ import {main} from '../models';
 
 export function CancelarPedido(arg1:number):Promise<void>;
 
+export function ClonarEvento(arg1:number):Promise<main.Evento>;
+
 export function CreateEvento(arg1:string,arg2:boolean):Promise<main.Evento>;
 
 export function CreateGrupo(arg1:number,arg2:string,arg3:string):Promise<main.Grupo>;
@@ -20,9 +22,17 @@ export function DeleteProduto(arg1:number):Promise<void>;
 
 export function FecharPedido(arg1:number,arg2:Array<main.PedidoItem>,arg3:string,arg4:string):Promise<main.Pedido>;
 
+export function GetDBPath():Promise<string>;
+
+export function GetLarguraLinha():Promise<number>;
+
+export function GetModoDebug():Promise<boolean>;
+
 export function GetPedido(arg1:number):Promise<main.Pedido>;
 
 export function Greet(arg1:string):Promise<string>;
+
+export function ImprimirTexto(arg1:string):Promise<void>;
 
 export function ListCartelas():Promise<Array<main.Cartela>>;
 
@@ -33,6 +43,8 @@ export function ListContasSaldo(arg1:number):Promise<Array<main.ContaSaldo>>;
 export function ListEventos():Promise<Array<main.Evento>>;
 
 export function ListGrupos(arg1:number):Promise<Array<main.Grupo>>;
+
+export function ListImpressoras():Promise<main.ImpressorasInfo>;
 
 export function ListPedidos(arg1:number,arg2:number,arg3:number,arg4:number):Promise<main.ListaPedidos>;
 
@@ -46,6 +58,8 @@ export function MoverGrupo(arg1:number,arg2:number):Promise<void>;
 
 export function MoverProduto(arg1:number,arg2:number):Promise<void>;
 
+export function OpenDBFolder():Promise<void>;
+
 export function QuitarConta(arg1:number):Promise<void>;
 
 export function ReorderGrupos(arg1:number,arg2:Array<number>):Promise<void>;
@@ -54,6 +68,12 @@ export function ReorderProdutos(arg1:Array<number>):Promise<void>;
 
 export function ResumoEvento(arg1:number):Promise<main.ResumoEvento>;
 
+export function SetImpressora(arg1:string):Promise<void>;
+
+export function SetLarguraLinha(arg1:number):Promise<void>;
+
+export function SetModoDebug(arg1:boolean):Promise<void>;
+
 export function SetProdutoAtivo(arg1:number,arg2:boolean):Promise<void>;
 
 export function UpdateEvento(arg1:number,arg2:string,arg3:boolean,arg4:boolean):Promise<void>;
@@ -61,3 +81,5 @@ export function UpdateEvento(arg1:number,arg2:string,arg3:boolean,arg4:boolean):
 export function UpdateGrupo(arg1:number,arg2:string,arg3:string):Promise<void>;
 
 export function UpdateProduto(arg1:number,arg2:string,arg3:number,arg4:string,arg5:number,arg6:number,arg7:number):Promise<void>;
+
+export function ZerarBanco():Promise<void>;

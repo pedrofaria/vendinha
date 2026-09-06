@@ -6,9 +6,16 @@ import ProdutosView from '../views/ProdutosView.vue'
 import ContasView from '../views/ContasView.vue'
 import PedidosView from '../views/PedidosView.vue'
 import PdvView from '../views/PdvView.vue'
+import ConfigView from '../views/ConfigView.vue'
 
 const routes: RouteRecordRaw[] = [
   { path: '/', redirect: '/eventos' },
+  {
+    path: '/config',
+    name: 'config',
+    component: ConfigView,
+    meta: { title: 'Configurações' }
+  },
   {
     path: '/eventos',
     name: 'eventos',

@@ -250,6 +250,22 @@ export namespace main {
 	        this.vendas = source["vendas"];
 	    }
 	}
+	export class ImpressorasInfo {
+	    nomes: string[];
+	    padrao: string;
+	    selecionada: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ImpressorasInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.nomes = source["nomes"];
+	        this.padrao = source["padrao"];
+	        this.selecionada = source["selecionada"];
+	    }
+	}
 	export class PedidoResumo {
 	    id: number;
 	    eventoId: number;
@@ -396,6 +412,7 @@ export namespace main {
 	    receitaTotal: number;
 	    numPedidos: number;
 	    numProdutosVendidos: number;
+	    vendasInicioHora: number;
 	    vendasPorHora: HoraVendas[];
 	
 	    static createFrom(source: any = {}) {
@@ -407,6 +424,7 @@ export namespace main {
 	        this.receitaTotal = source["receitaTotal"];
 	        this.numPedidos = source["numPedidos"];
 	        this.numProdutosVendidos = source["numProdutosVendidos"];
+	        this.vendasInicioHora = source["vendasInicioHora"];
 	        this.vendasPorHora = this.convertValues(source["vendasPorHora"], HoraVendas);
 	    }
 	
