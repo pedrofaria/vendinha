@@ -59,21 +59,22 @@ async function save() {
   }
 }
 
-async function toggleAtivo(e: Evento) {
+async function del(e: Evento) {
+  if (!confirm(`Excluir o evento "${e.nome}"? Produtos e vendas dele serão removidos.`)) return
   error.value = ''
   try {
-    await api().UpdateEvento(e.id, e.nome, !e.ativo, e.vendeCartela)
+    await api().DeleteEvento(e.id)
     await load()
   } catch (err) {
     error.value = errMsg(err)
   }
 }
 
-async function del(e: Evento) {
-  if (!confirm(`Excluir o evento "${e.nome}"? Produtos e vendas dele serão removidos.`)) return
+async function clonar(e: Evento) {
+  if (!confirm(`Criar uma cópia de "${e.nome}" com os produtos (sem vendas e sem "Anota aí")?`)) return
   error.value = ''
   try {
-    await api().DeleteEvento(e.id)
+    await api().ClonarEvento(e.id)
     await load()
   } catch (err) {
     error.value = errMsg(err)
@@ -129,12 +130,7 @@ onMounted(load)
             @click="router.push(`/pdv/${e.id}`)">
             Vender
           </UButton>
-          <UButton color="primary" variant="outline" icon="i-lucide-package" size="sm" title="Gerenciar produtos"
-            @click="router.push(`/eventos/${e.id}/produtos`)">
-            Produtos
-          </UButton>
-          <UButton color="neutral" variant="ghost" :icon="e.ativo ? 'i-lucide-eye-off' : 'i-lucide-eye'" size="sm"
-            :title="e.ativo ? 'Desativar' : 'Ativar'" @click="toggleAtivo(e)" />
+          <UButton color="neutral" variant="ghost" icon="i-lucide-copy" size="sm" title="Clonar evento (produtos, sem vendas)" @click="clonar(e)" />
           <UButton color="neutral" variant="ghost" icon="i-lucide-pencil" size="sm" title="Renomear" @click="openEdit(e)" />
           <UButton color="error" variant="ghost" icon="i-lucide-trash-2" size="sm" title="Excluir" @click="del(e)" />
         </div>

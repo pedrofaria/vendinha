@@ -12,9 +12,25 @@ const resumo = ref<ResumoEvento | null>(null)
 const loading = ref(false)
 const error = ref('')
 
-const horas = computed(() => resumo.value?.vendasPorHora ?? [])
+const horas = computed(() => {
+  const arr = resumo.value?.vendasPorHora ?? []
+  // Rotaciona o eixo para começar na hora da 1ª venda (virada de meia-noite):
+  // festa 14h→01h mostra 14h…23h, 0h, 1h. Horário normal (tudo no mesmo dia)
+  // vem com vendasInicioHora = 0 e não roda.
+  const inicio = resumo.value?.vendasInicioHora ?? 0
+  if (arr.length && inicio > 0 && inicio < arr.length) {
+    return [...arr.slice(inicio), ...arr.slice(0, inicio)]
+  }
+  return arr
+})
 const maxHora = computed(() => Math.max(1, ...horas.value.map((h) => h.vendas)))
 const totalVendas = computed(() => horas.value.reduce((s, h) => s + h.vendas, 0))
+
+// Marca de hora embaixo do eixo: a 1ª e a última coluna sempre têm rótulo, e
+// cada hora múltipla de 6 (0h/6h/12h/18h) também — orientam ao longo da linha.
+function ehMarco(i: number, hora: number, total: number): boolean {
+  return i === 0 || i === total - 1 || hora % 6 === 0
+}
 
 async function load() {
   loading.value = true
@@ -80,7 +96,7 @@ onMounted(load)
       <div class="mt-6 rounded-xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
         <div class="mb-1 flex items-baseline justify-between gap-2">
           <h3 class="text-sm font-semibold text-neutral-900 dark:text-neutral-100">Vendas por hora</h3>
-          <span class="text-xs text-neutral-400">total: {{ totalVendas }} {{ totalVendas === 1 ? 'venda' : 'vendas' }}</span>
+          <span class="text-xs text-neutral-400">total: {{ totalVendas }} {{ totalVendas === 1 ? 'pedido' : 'pedidos' }}</span>
         </div>
 
         <div v-if="totalVendas === 0" class="rounded-lg border border-dashed border-neutral-300 p-8 text-center text-sm text-neutral-400 dark:border-neutral-700">
@@ -92,24 +108,32 @@ onMounted(load)
             v-for="h in horas"
             :key="h.hora"
             class="group relative flex h-full flex-1 flex-col items-center justify-end"
-            :title="`${String(h.hora).padStart(2, '0')}h: ${h.vendas} ${h.vendas === 1 ? 'venda' : 'vendas'}`"
+            :title="`${String(h.hora).padStart(2, '0')}h: ${h.vendas} ${h.vendas === 1 ? 'pedido' : 'pedidos'}`"
           >
             <div
-              class="w-full rounded-t transition-colors"
-              :class="h.vendas === maxHora && h.vendas > 0
-                ? 'bg-emerald-500 dark:bg-emerald-400'
-                : 'bg-emerald-200 hover:bg-emerald-300 dark:bg-emerald-900/70 dark:hover:bg-emerald-700'"
+              class="relative w-full"
               :style="{ height: `${(h.vendas / maxHora) * 100}%` }"
-            />
+            >
+              <span
+                v-if="h.vendas > 0"
+                class="pointer-events-none absolute bottom-full left-1/2 mb-0.5 -translate-x-1/2 whitespace-nowrap text-[10px] font-medium leading-none text-neutral-500 dark:text-neutral-400"
+              >{{ h.vendas }}</span>
+              <div
+                class="h-full w-full rounded-t transition-colors"
+                :class="h.vendas === maxHora && h.vendas > 0
+                  ? 'bg-emerald-500 dark:bg-emerald-400'
+                  : 'bg-emerald-200 hover:bg-emerald-300 dark:bg-emerald-900/70 dark:hover:bg-emerald-700'"
+              />
+            </div>
           </div>
         </div>
 
-        <div class="mt-1 flex justify-between text-[10px] text-neutral-400">
-          <span>0h</span>
-          <span>6h</span>
-          <span>12h</span>
-          <span>18h</span>
-          <span>23h</span>
+        <div class="mt-1 flex gap-0.5 text-[10px] text-neutral-400">
+          <div
+            v-for="(h, i) in horas"
+            :key="h.hora"
+            class="flex-1 text-center"
+          >{{ ehMarco(i, h.hora, horas.length) ? `${String(h.hora).padStart(2, '0')}h` : '' }}</div>
         </div>
       </div>
     </template>
