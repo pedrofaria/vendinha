@@ -37,9 +37,21 @@ const buscando = ref<string>('')
 const chaveProduto = (id: number) => `p${id}`
 const chaveCartela = (reais: number) => `c${reais}`
 
-// Resultado do pedido fechado + modal de recibo/impressão
+// Resultado do pedido fechado + modal de recibo/impressão.
+// - 'preview' = modo debug ligado (mostra o recibo na tela, não imprime);
+// - 'impresso' = enviado à impressora com sucesso;
+// - 'erro'    = falha ao imprimir (mostra o conteúdo p/ não perder a venda).
+type ReciboModo = 'preview' | 'impresso' | 'erro'
 const showReceipt = ref(false)
 const pedidoFechado = ref<Pedido | null>(null)
+const reciboModo = ref<ReciboModo>('preview')
+const reciboErro = ref('')
+const imprimindo = ref(false)
+const impressoraNome = ref('') // p/ a confirmação; '' = padrão do SO
+
+// Preferências globais (tabela config) que mudam o comportamento do recibo.
+const modoDebug = ref(true) // padrão prudente: mostra na tela (não imprime)
+const larguraLinha = ref(32) // nº de caracteres por linha da térmica
 
 // Dialog de forma de pagamento antes de fechar de fato
 type FormaPagamento = 'dinheiro' | 'cartao' | 'anotaai'
@@ -48,7 +60,6 @@ const forma = ref<FormaPagamento | null>(null)
 const recebidoText = ref('')
 const showConfirmCancelar = ref(false)
 const confirmarDePagamento = ref(false)
-const pagamentoFechado = ref<{ forma: FormaPagamento; recebido: number; troco: number; contaNome?: string } | null>(null)
 
 // "Anota aí" (fiado): o dono da conta é escolhido via CommandPalette. Contas
 // existentes do evento aparecem na lista; se o texto digitado não casa com
@@ -327,7 +338,7 @@ function onGlobalKey(e: KeyboardEvent) {
     }
     if (showReceipt.value) {
       e.preventDefault()
-      showReceipt.value = false
+      if (!imprimindo.value) showReceipt.value = false
       return
     }
     // tela principal do PDV: Enter = "Fechar pedido"
@@ -427,8 +438,6 @@ async function fecharPedido(forma: FormaPagamento) {
   error.value = ''
   buscando.value = 'Finalizando…'
   // captura antes de qualquer await (carrinho ainda intacto)
-  const recebido = forma === 'dinheiro' ? recebidoCents.value : totalCarrinho.value
-  const trocoValor = forma === 'dinheiro' ? troco.value : 0
   const nomeConta = forma === 'anotaai' ? (contaEscolhida.value?.nome ?? '') : ''
   try {
     const pedido = await api().CriarPedido(eventoId.value)
@@ -442,11 +451,10 @@ async function fecharPedido(forma: FormaPagamento) {
       subtotal: l.qtd * l.preco
     }))
     pedidoFechado.value = await api().FecharPedido(pedido.id, itens, forma, nomeConta)
-    pagamentoFechado.value = { forma, recebido, troco: trocoValor, contaNome: nomeConta || undefined }
-    showReceipt.value = true
     clearCart()
     await loadProdutos() // reflete estoque novo
     if (forma === 'anotaai') await loadContas() // conta nova (se criou) entra no autocomplete
+    await apresentarRecibo()
   } catch (e) {
     error.value = errMsg(e)
   } finally {
@@ -454,43 +462,142 @@ async function fecharPedido(forma: FormaPagamento) {
   }
 }
 
-// Receipt text formatado para impressão térmica (ficha).
+// ---- Preferências de impressão (modo debug + largura + impressora) ----
+async function loadPrefsImpressao() {
+  try {
+    modoDebug.value = await api().GetModoDebug()
+  } catch {
+    /* mantém o default prudente (mostra na tela) */
+  }
+  try {
+    const L = await api().GetLarguraLinha()
+    if (Number(L) > 0) larguraLinha.value = Number(L)
+  } catch {
+    /* mantém 32 */
+  }
+  try {
+    const info = await api().ListImpressoras()
+    impressoraNome.value = info.selecionada ?? ''
+  } catch {
+    /* sem nome p/ a confirmação */
+  }
+}
+
+// Nº total de tickets de cartela a imprimir no pedido (1 por unidade vendida).
+const cartelasQtd = computed(() => cartelasImprimir.value.reduce((s, c) => s + c.qtd, 0))
+
+// Decide o que fazer ao fechar: modo debug ON mostra o recibo na tela; OFF imprime.
+async function apresentarRecibo() {
+  reciboErro.value = ''
+  if (modoDebug.value) {
+    reciboModo.value = 'preview'
+    showReceipt.value = true
+    return
+  }
+  imprimindo.value = true
+  try {
+    await imprimirReciboAtual()
+    reciboModo.value = 'impresso'
+  } catch (e) {
+    reciboModo.value = 'erro'
+    reciboErro.value = errMsg(e)
+  } finally {
+    imprimindo.value = false
+    showReceipt.value = true
+  }
+}
+
+// Envia à impressora o recibo + um ticket por cartela vendida (modo normal).
+async function imprimirReciboAtual() {
+  const p = pedidoFechado.value
+  if (!p) return
+  await api().ImprimirTexto(receiptText())
+  for (const cp of cartelasImprimir.value) {
+    for (let i = 0; i < cp.qtd; i++) await api().ImprimirTexto(cp.conteudo)
+  }
+}
+
+// Tenta de novo após uma falha de impressão (botão no modal de erro).
+async function reimprimir() {
+  reciboErro.value = ''
+  imprimindo.value = true
+  try {
+    await imprimirReciboAtual()
+    reciboModo.value = 'impresso'
+  } catch (e) {
+    reciboErro.value = errMsg(e)
+  } finally {
+    imprimindo.value = false
+  }
+}
+
+// ---- Formatação do recibo (o MESMO texto aparece na tela e vai à impressora) ----
+
+function ruleLine(): string {
+  return '-'.repeat(larguraLinha.value)
+}
+
+function center(s: string): string {
+  const L = larguraLinha.value
+  if (s.length >= L) return s.slice(0, L)
+  return ' '.repeat(Math.floor((L - s.length) / 2)) + s
+}
+
+// Nome alinhado à esquerda e valor à direita, preenchendo a largura da linha.
+function itemLine(nome: string, valor: string): string {
+  const L = larguraLinha.value
+  const v = valor.length >= L ? valor.slice(0, L) : valor
+  const maxNome = L - v.length - 1 // reserva ao menos 1 espaço entre nome e valor
+  const n = maxNome > 0 ? nome.slice(0, maxNome) : nome.slice(0, Math.max(0, L - v.length))
+  return n.padEnd(Math.max(0, L - v.length), ' ') + v
+}
+
+// "2006-01-02 15:04:05" → "02/01/2006 15:04"
+function fmtDataHora(s: string): string {
+  if (!s) return ''
+  const [d, h] = s.split(' ')
+  const [ano, mes, dia] = (d || '').split('-')
+  const hora = (h || '').slice(0, 5)
+  return dia && mes && ano ? `${dia}/${mes}/${ano}${hora ? ' ' + hora : ''}` : s
+}
+
 function receiptText(): string {
   const p = pedidoFechado.value
   if (!p) return ''
-  const lines: string[] = []
-  lines.push('          VENDINHA')
-  lines.push('--------------------------------')
-  lines.push(`Evento: ${evento.value?.nome ?? ''}`)
-  lines.push(`Ficha/Pedido: #${p.numero}`)
-  lines.push(`Data: ${p.criadoEm}`)
-  lines.push('--------------------------------')
+  const L: string[] = []
+  const r = ruleLine()
+  // ---- Cabeçalho ----
+  L.push(r)
+  const titulo = evento.value?.nome?.trim()
+  if (titulo) L.push(center(titulo))
+  const dh = fmtDataHora(p.criadoEm)
+  if (dh) L.push(center(dh))
+  L.push(r)
+  L.push(`Pedido Nr.: ${p.numero}`)
+  // ---- Resumo (vem logo após o cabeçalho, antes dos itens) ----
+  L.push('')
+  const qtdItens = p.itens.reduce((s, it) => s + it.qtd, 0)
+  L.push(`Qtd Itens: ${qtdItens}`)
+  L.push(itemLine('Total', money(p.total)))
+  // ---- Itens: um bloco por item físico (repete o produto na quantidade).
+  //      Cada divisor fica ISOLADO, com uma linha vazia antes e depois;
+  //      dentro do bloco o nome e o valor são contíguos (opção A). ----
   for (const it of p.itens) {
-    lines.push(`${it.qtd}x ${it.nome}`)
-    lines.push(`    ${money(it.subtotal)}`)
-  }
-  lines.push('--------------------------------')
-  lines.push(`TOTAL: ${money(p.total)}`)
-  const pg = pagamentoFechado.value
-  if (pg) {
-    if (pg.forma === 'dinheiro') {
-      lines.push(`Pagamento: Dinheiro`)
-      lines.push(`Recebido: ${money(pg.recebido)}`)
-      if (pg.troco > 0) lines.push(`Troco: ${money(pg.troco)}`)
-    } else if (pg.forma === 'anotaai') {
-      lines.push('Pagamento: Anota aí')
-      lines.push(`Conta: ${pg.contaNome ?? ''}`)
-    } else {
-      lines.push('Pagamento: Cartão')
+    for (let i = 0; i < it.qtd; i++) {
+      L.push('') // linha vazia antes do divisor
+      L.push(r)
+      L.push('') // linha vazia depois do divisor
+      L.push(it.nome)
+      L.push(money(it.precoUnit))
     }
   }
-  lines.push('')
-  lines.push('Obrigado!')
-  return lines.join('\n')
+  L.push('')
+  return L.join('\n')
 }
 
 onMounted(() => {
   window.addEventListener('keydown', onGlobalKey)
+  loadPrefsImpressao()
   loadEvento()
   loadProdutos()
   loadCartelas()
@@ -512,6 +619,14 @@ onBeforeUnmount(() => {
         <div class="text-sm">
           <span class="font-medium">{{ evento?.nome ?? 'Venda' }}</span>
         </div>
+        <span
+          v-if="modoDebug"
+          class="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-950 dark:text-amber-400"
+          title="Modo debug ligado: o recibo não vai à impressora (mostra na tela). Desligue em Configurações para imprimir."
+        >
+          <UIcon name="i-lucide-bug" class="size-3" />
+          debug
+        </span>
       </div>
       <div class="text-sm text-neutral-500 dark:text-neutral-400">
         {{ itensCount }} {{ itensCount === 1 ? 'item' : 'itens' }} · {{ money(totalCarrinho) }}
@@ -663,36 +778,75 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <!-- Recibo / simulação de impressão -->
-    <UModal v-model:open="showReceipt" title="Pedido fechado" :ui="{ content: 'max-w-md' }">
+    <!-- Recibo: em modo debug mostra o conteúdo (como iria para a impressora);
+         com impressão ligada, confirma o envio (ou mostra o erro + conteúdo). -->
+    <UModal v-model:open="showReceipt" title="Pedido fechado" :ui="{ content: 'max-w-md' }" :dismissible="!imprimindo">
       <template #body>
-        <div v-if="pedidoFechado" class="rounded border border-dashed border-neutral-300 bg-neutral-50 p-4 font-mono text-[13px] leading-relaxed whitespace-pre dark:border-neutral-700 dark:bg-neutral-950">
-          {{ receiptText() }}
-        </div>
+        <UAlert
+          v-if="reciboModo === 'erro' && reciboErro"
+          color="error"
+          icon="i-lucide-alert-triangle"
+          class="mb-4"
+          :title="`Não foi possível imprimir o pedido #${pedidoFechado?.numero ?? ''}`"
+          :description="reciboErro"
+        />
 
-        <!-- Cartelas vendidas no pedido: layout ASCII a imprimir (1 cópia por unidade) -->
-        <div v-if="cartelasImprimir.length" class="mt-4 space-y-4">
-          <div>
-            <h4 class="mb-1 text-sm font-semibold text-neutral-900 dark:text-neutral-100">Cartelas para imprimir</h4>
-            <p class="mb-3 text-xs text-neutral-500">
-              O conteúdo abaixo é o que vai à impressão térmica (MTP II) — ainda exibido aqui em modo debug. Uma cópia por cartela vendida.
+        <!-- Preview (modo debug) ou conteúdo do que falhou: mesmo texto da impressão -->
+        <template v-if="reciboModo !== 'impresso'">
+          <div v-if="pedidoFechado" class="rounded border border-dashed border-neutral-300 bg-neutral-50 p-4 font-mono text-[13px] leading-relaxed whitespace-pre dark:border-neutral-700 dark:bg-neutral-950">
+            {{ receiptText() }}
+          </div>
+
+          <!-- Cartelas vendidas no pedido: layout ASCII (1 cópia por unidade) -->
+          <div v-if="cartelasImprimir.length" class="mt-4 space-y-4">
+            <div>
+              <h4 class="mb-1 text-sm font-semibold text-neutral-900 dark:text-neutral-100">Cartelas para imprimir</h4>
+              <p class="mb-3 text-xs text-neutral-500">
+                O conteúdo abaixo é o que vai à impressão térmica (MTP II). Uma cópia por cartela vendida.
+              </p>
+            </div>
+            <div v-for="cp in cartelasImprimir" :key="cp.reais">
+              <p class="mb-1 text-xs font-medium text-neutral-500 dark:text-neutral-400">
+                {{ cp.nome }} · {{ cp.qtd }} {{ cp.qtd === 1 ? 'cópia' : 'cópias' }}
+              </p>
+              <pre class="overflow-x-auto rounded border border-dashed border-violet-300 bg-neutral-50 p-3 font-mono text-[12px] leading-tight whitespace-pre text-neutral-800 dark:border-violet-800 dark:bg-neutral-950 dark:text-neutral-200">{{ cp.conteudo }}</pre>
+            </div>
+          </div>
+
+          <p v-if="!cartelasImprimir.length && reciboModo === 'preview'" class="mt-3 text-sm text-neutral-500">
+            Modo debug: o recibo aparece aqui e <strong>não</strong> vai à impressora.
+          </p>
+          <p v-else-if="!cartelasImprimir.length && reciboModo === 'erro'" class="mt-3 text-sm text-neutral-500">
+            O envio falhou — acima está o que deveria ter sido impresso. Toque em “Reimprimir”.
+          </p>
+        </template>
+
+        <!-- Impresso com sucesso -->
+        <div v-else class="flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900 dark:bg-emerald-950/40">
+          <UIcon name="i-lucide-check" class="mt-0.5 size-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+          <div class="text-sm text-emerald-800 dark:text-emerald-300">
+            <p class="font-semibold">Recibo do pedido #{{ pedidoFechado?.numero }} impresso.</p>
+            <p class="mt-1 opacity-80">Impressora: {{ impressoraNome || 'padrão do sistema' }}.</p>
+            <p v-if="cartelasQtd" class="mt-1 opacity-80">
+              {{ cartelasQtd }} {{ cartelasQtd === 1 ? 'cartela impressa' : 'cartelas impressas' }}.
             </p>
           </div>
-          <div v-for="cp in cartelasImprimir" :key="cp.reais">
-            <p class="mb-1 text-xs font-medium text-neutral-500 dark:text-neutral-400">
-              {{ cp.nome }} · {{ cp.qtd }} {{ cp.qtd === 1 ? 'cópia' : 'cópias' }}
-            </p>
-            <pre class="overflow-x-auto rounded border border-dashed border-violet-300 bg-neutral-50 p-3 font-mono text-[12px] leading-tight whitespace-pre text-neutral-800 dark:border-violet-800 dark:bg-neutral-950 dark:text-neutral-200">{{ cp.conteudo }}</pre>
-          </div>
         </div>
-
-        <p v-if="!cartelasImprimir.length" class="mt-3 text-sm text-neutral-500">
-          Em modo debug, o recibo é exibido aqui. No futuro, será enviado à impressora térmica (MTP II).
-        </p>
       </template>
       <template #footer>
         <div class="flex justify-end gap-2">
-          <UButton color="primary" variant="soft" @click="showReceipt = false">Novo pedido</UButton>
+          <UButton
+            v-if="reciboModo === 'erro' && !imprimindo"
+            color="neutral"
+            variant="soft"
+            icon="i-lucide-rotate-ccw"
+            @click="reimprimir"
+          >
+            Reimprimir
+          </UButton>
+          <UButton color="primary" variant="soft" :loading="imprimindo" :disabled="imprimindo" @click="showReceipt = false">
+            Novo pedido
+          </UButton>
         </div>
       </template>
     </UModal>
