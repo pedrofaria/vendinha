@@ -12,6 +12,97 @@ func newTestRepo(t *testing.T) *repo {
 	return NewRepo(db)
 }
 
+func TestZerarBanco(t *testing.T) {
+	r := newTestRepo(t)
+
+	// Povoa: evento com produto + pedido fechado (gera pedido_itens).
+	ev, err := r.CreateEvento("Festival", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	grupo, err := r.CreateGrupo(ev.ID, "Comida", CorPadraoGrupo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prod, err := r.CreateProduto(ev.ID, "Pastel", 1500, EstoqueLimitado, 5, grupo.ID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := r.CriarPedido(ev.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.FecharPedido(p.ID, []PedidoItem{{ProdutoID: prod.ID, Nome: "Pastel", PrecoUnit: 1500, Qtd: 2}}, FormaDinheiro, ""); err != nil {
+		t.Fatal(err)
+	}
+	if l, _ := r.ListEventos(); len(l) != 1 {
+		t.Fatalf("antes de zerar: esperava 1 evento, tem %d", len(l))
+	}
+
+	// Zera.
+	if err := zeroBanco(r.db); err != nil {
+		t.Fatalf("zeroBanco: %v", err)
+	}
+
+	// Tudo removido e tabelas reutilizáveis.
+	if l, _ := r.ListEventos(); len(l) != 0 {
+		t.Fatalf("após zerar: esperava 0 eventos, tem %d", len(l))
+	}
+	if g, _ := r.gruposOrdenados(ev.ID); len(g) != 0 {
+		t.Fatalf("após zerar: esperava 0 grupos, tem %d", len(g))
+	}
+	// O schema/migrações continuam funcionando e o AUTOINCREMENT voltou a 1.
+	ev2, err := r.CreateEvento("Novo festival", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ev2.ID != 1 {
+		t.Fatalf("autoincrement não resetado: id do novo evento = %d, esperava 1", ev2.ID)
+	}
+	if _, err := r.CreateGrupo(ev2.ID, "Doces", CorPadraoGrupo); err != nil {
+		t.Fatalf("grupo novo após zerar: %v", err)
+	}
+}
+
+func TestConfigNoBanco(t *testing.T) {
+	r := newTestRepo(t)
+
+	// Gravando/gravando lendo no banco.
+	if err := configSet(r.db, "impressora", "HPRT MPT-II"); err != nil {
+		t.Fatalf("configSet: %v", err)
+	}
+	if err := configSet(r.db, "larguraLinha", "40"); err != nil {
+		t.Fatalf("configSet: %v", err)
+	}
+	if got, _ := configGet(r.db, "impressora"); got != "HPRT MPT-II" {
+		t.Fatalf("impressora = %q, esperava HPRT MPT-II", got)
+	}
+
+	// Upsert: sobrescreve.
+	if err := configSet(r.db, "larguraLinha", "48"); err != nil {
+		t.Fatalf("configSet: %v", err)
+	}
+	if got, _ := configGet(r.db, "larguraLinha"); got != "48" {
+		t.Fatalf("larguraLinha = %q, esperava 48", got)
+	}
+
+	// Chave inexistente = vazio.
+	if got, _ := configGet(r.db, "naoExiste"); got != "" {
+		t.Fatalf("chave inexistente = %q, esperava vazio", got)
+	}
+
+	// ZeroBanco preserva a config (não apaga impressora/largura).
+	if err := zeroBanco(r.db); err != nil {
+		t.Fatalf("zeroBanco: %v", err)
+	}
+	if got, _ := configGet(r.db, "impressora"); got != "HPRT MPT-II" {
+		t.Fatalf("após zerar, impressora = %q, esperava preservada", got)
+	}
+	if got, _ := configGet(r.db, "larguraLinha"); got != "48" {
+		t.Fatalf("após zerar, larguraLinha = %q, esperava preservada", got)
+	}
+}
+
 func TestEventoProdutoPedido(t *testing.T) {
 	r := newTestRepo(t)
 
@@ -581,6 +672,70 @@ func TestQuitarContaEresumo(t *testing.T) {
 	}
 }
 
+// TestResumoViraMeiaNoite: quando as vendas do evento cruzam a meia-noite (1ª
+// venda num dia, última no seguinte), o gráfico deve rotacionar o eixo para
+// começar na hora da 1ª venda — ex.: festa 14h→01h mostra 14h…23h, 0h, 1h. O
+// histograma em si continua indexado pela hora do calendário (0–23); só o
+// VendasInicioHora informa a rotação ao frontend.
+func TestResumoViraMeiaNoite(t *testing.T) {
+	r := newTestRepo(t)
+
+	set := func(p Pedido, ts string) {
+		if _, err := r.db.Exec(`UPDATE pedidos SET criado_em = ? WHERE id = ?`, ts, p.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Abre e fecha n pedidos de um produto novo do evento; devolve os fechados.
+	makePedidos := func(evID int64, n int) []Pedido {
+		prod, err := r.CreateProduto(evID, "Pastel", 1000, EstoqueIlimitado, 0, 0, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		it := []PedidoItem{{ProdutoID: prod.ID, Nome: "Pastel", PrecoUnit: 1000, Qtd: 1}}
+		out := []Pedido{}
+		for i := 0; i < n; i++ {
+			ped, _ := r.CriarPedido(evID)
+			if _, err := r.FecharPedido(ped.ID, it, FormaDinheiro, ""); err != nil {
+				t.Fatal(err)
+			}
+			out = append(out, ped)
+		}
+		return out
+	}
+
+	// Caso que cruza a meia-noite: começa 06/09 14:30 e vai até 07/09 01:20.
+	evCross, _ := r.CreateEvento("Noite virada", false)
+	p := makePedidos(evCross.ID, 4)
+	set(p[0], "2026-09-06 14:30:00")
+	set(p[1], "2026-09-06 23:00:00")
+	set(p[2], "2026-09-07 00:10:00")
+	set(p[3], "2026-09-07 01:20:00")
+
+	res, err := r.ResumoEvento(evCross.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.VendasInicioHora != 14 {
+		t.Fatalf("virada de meia-noite deveria iniciar na 1ª venda (14h), tem %d", res.VendasInicioHora)
+	}
+	// Histograma indexado por hora do calendário: 1 pedido em 14h, 23h, 0h e 1h.
+	for _, want := range map[int64]int64{14: 1, 23: 1, 0: 1, 1: 1} {
+		if res.VendasPorHora[want].Vendas != 1 {
+			t.Fatalf("hora %d deveria ter 1 venda, tem %d", want, res.VendasPorHora[want].Vendas)
+		}
+	}
+
+	// Caso normal (mesmo dia): eixo começa em 0h.
+	evDia, _ := r.CreateEvento("Bazar dia", false)
+	d := makePedidos(evDia.ID, 2)
+	set(d[0], "2026-09-10 09:15:00")
+	set(d[1], "2026-09-10 17:45:00")
+	res2, _ := r.ResumoEvento(evDia.ID)
+	if res2.VendasInicioHora != 0 {
+		t.Fatalf("mesmo dia deveria iniciar em 0h, tem %d", res2.VendasInicioHora)
+	}
+}
+
 // Conta em outro evento não é quitada por engano: QuitarConta só age nos
 // pedidos da conta alvo (que já é por evento), então cria contas de eventos
 // diferentes e quita só uma delas.
@@ -872,3 +1027,107 @@ func TestCancelarPedidoAnotaAi(t *testing.T) {
 		t.Fatalf("pedido quitado cancelado não deveria contar no quitado, tem %d", saldo[0].TotalQuitado)
 	}
 }
+
+func TestClonarEvento(t *testing.T) {
+	r := newTestRepo(t)
+
+	// Evento-fonte com cartelas habilitadas, grupos e produtos (com/sem grupo, atalho).
+	ev, err := r.CreateEvento("Festa Junina", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	comida, _ := r.CreateGrupo(ev.ID, "Comida", "#ef4444")
+	bebida, _ := r.CreateGrupo(ev.ID, "Bebida", "#3b82f6")
+	if _, err := r.CreateProduto(ev.ID, "Pastel", 1500, EstoqueIlimitado, 0, comida.ID, 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.CreateProduto(ev.ID, "Caneca", 2000, EstoqueLimitado, 3, bebida.ID, 2); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.CreateProduto(ev.ID, "Chaveiro", 500, EstoqueLimitado, 5, 0, 3); err != nil {
+		t.Fatal(err)
+	}
+
+	// Um pedido anotado + conta (não devem ser copiados).
+	ped, _ := r.CriarPedido(ev.ID)
+	_, _ = r.FecharPedido(ped.ID, []PedidoItem{{CartelaReais: 10, Nome: "Cartela R$ 10", PrecoUnit: 1000, Qtd: 1}}, FormaAnotaAi, "Maria")
+
+	// Clona.
+	clone, err := r.ClonarEvento(ev.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if clone.ID == ev.ID {
+		t.Fatal("clone deveria ter id diferente")
+	}
+	if clone.Nome != ev.Nome+" (cópia)" {
+		t.Fatalf("nome do clone esperado %q, tem %q", ev.Nome+" (cópia)", clone.Nome)
+	}
+	if !clone.Ativo {
+		t.Fatal("clone deveria nascer ativo")
+	}
+	if !clone.VendeCartela {
+		t.Fatal("clone deveria herdar vende_cartela=true")
+	}
+
+	// Só 2 eventos existem.
+	list, _ := r.ListEventos()
+	if len(list) != 2 {
+		t.Fatalf("esperava 2 eventos, tem %d", len(list))
+	}
+
+	// Nenhum pedido/conta no clone.
+	if got, _ := r.ListPedidos(clone.ID, 1, 50, 0); got.Total != 0 {
+		t.Fatalf("clone não deveria ter pedidos, tem %d", got.Total)
+	}
+	if got, _ := r.ListContas(clone.ID); len(got) != 0 {
+		t.Fatalf("clone não deveria ter contas, tem %d", len(got))
+	}
+
+	// Grupos copiados (nome/cor) apontando o clone.
+	origGrupos, _ := r.gruposOrdenados(ev.ID)
+	cloneGrupos, _ := r.gruposOrdenados(clone.ID)
+	if len(cloneGrupos) != len(origGrupos) {
+		t.Fatalf("esperava %d grupos no clone, tem %d", len(origGrupos), len(cloneGrupos))
+	}
+	for i := range origGrupos {
+		og, cg := origGrupos[i], cloneGrupos[i]
+		if og.Nome != cg.Nome || og.Cor != cg.Cor {
+			t.Fatalf("grupo %d divergente: orig %q/%q clone %q/%q", i, og.Nome, og.Cor, cg.Nome, cg.Cor)
+		}
+		if cg.EventoID != clone.ID {
+			t.Fatalf("grupo do clone aponta evento %d, esperava %d", cg.EventoID, clone.ID)
+		}
+	}
+
+	// Produtos no clone: 2 em grupo + 1 sem grupo, com preço/estoque/atalho íntegros.
+	cloneProd, _ := r.ListProdutos(clone.ID)
+	var agrupados, semGrupo int
+	for _, g := range cloneProd {
+		if g.Grupo.ID == 0 {
+			semGrupo += len(g.Produtos)
+			continue
+		}
+		agrupados += len(g.Produtos)
+		for _, p := range g.Produtos {
+			if p.Nome == "Caneca" && (p.Preco != 2000 || p.EstoqueTipo != EstoqueLimitado || p.Quantidade != 3) {
+				t.Fatalf("produto %q do clone perdeu dados", p.Nome)
+			}
+			if p.Atalho < 1 {
+				t.Fatalf("produto %q do clone deveria preservar o atalho", p.Nome)
+			}
+			if p.GrupoID == 0 {
+				t.Fatalf("produto %q deveria estar num grupo", p.Nome)
+			}
+		}
+	}
+	if agrupados != 2 || semGrupo != 1 {
+		t.Fatalf("clone deveria ter 2 produtos em grupo e 1 sem grupo (tem %d em grupo, %d sem)", agrupados, semGrupo)
+	}
+
+	// Vendas: o clone tem produtos vendáveis (atalhos únicos respeitados no INSERT).
+	if v, _ := r.ListProdutosVenda(clone.ID); len(v) == 0 {
+		t.Fatal("clone deveria ter produtos vendáveis")
+	}
+}
+

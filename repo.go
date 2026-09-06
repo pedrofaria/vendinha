@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // =============================================================
@@ -80,6 +81,119 @@ func (r *repo) DeleteEvento(id int64) error {
 		return err
 	}
 	return requireAffected(res, "evento")
+}
+
+// ClonarEvento duplica um evento e sua estrutura (grupos e produtos), ignorando
+// pedidos, vendas e contas do "Anota aí". O novo evento nasce ativo, com o mesmo
+// nome + " (cópia)", e herda vende_cartela, grupos (nome/cor/ordem) e produtos
+// (nome, preço, estoque, ativo, ordem, atalho e vínculo de grupo — remapeado
+// para o novo grupo). Ordem e atalho são preservados porque o evento novo começa
+// vazio (sem conflito de tecla). Tudo roda numa única transação.
+func (r *repo) ClonarEvento(id int64) (Evento, error) {
+	src, err := r.GetEvento(id)
+	if err != nil {
+		return Evento{}, err
+	}
+
+	tx, err := r.db.Begin()
+	if err != nil {
+		return Evento{}, err
+	}
+	defer tx.Rollback()
+
+	vc := 0
+	if src.VendeCartela {
+		vc = 1
+	}
+	res, err := tx.Exec(`INSERT INTO eventos (nome, vende_cartela) VALUES (?, ?)`, src.Nome+" (cópia)", vc)
+	if err != nil {
+		return Evento{}, err
+	}
+	novoID, _ := res.LastInsertId()
+
+	// ---- grupos: materializa e insere, mapeando id antigo -> novo ----
+	gRows, err := tx.Query(`SELECT id, nome, cor, ordem FROM grupos WHERE evento_id = ?`, id)
+	if err != nil {
+		return Evento{}, err
+	}
+	type linhaGrupo struct {
+		oldID int64
+		nome  string
+		cor   string
+		ordem int64
+	}
+	grupos := []linhaGrupo{}
+	for gRows.Next() {
+		var g linhaGrupo
+		if err := gRows.Scan(&g.oldID, &g.nome, &g.cor, &g.ordem); err != nil {
+			gRows.Close()
+			return Evento{}, err
+		}
+		grupos = append(grupos, g)
+	}
+	if err := gRows.Close(); err != nil {
+		return Evento{}, err
+	}
+	grupoMap := map[int64]int64{} // grupo antigo -> novo
+	for _, g := range grupos {
+		gres, err := tx.Exec(`INSERT INTO grupos (evento_id, nome, cor, ordem) VALUES (?,?,?,?)`,
+			novoID, g.nome, g.cor, g.ordem)
+		if err != nil {
+			return Evento{}, err
+		}
+		gid, _ := gres.LastInsertId()
+		grupoMap[g.oldID] = gid
+	}
+
+	// ---- produtos: materializa e insere, remapeando grupo_id ----
+	pRows, err := tx.Query(`SELECT nome, preco, estoque_tipo, quantidade, ativo, grupo_id, ordem, atalho
+		FROM produtos WHERE evento_id = ?`, id)
+	if err != nil {
+		return Evento{}, err
+	}
+	type linhaProduto struct {
+		nome       string
+		preco      int64
+		tipo       string
+		quantidade int64
+		ativo      int64
+		grupo      sql.NullInt64
+		ordem      int64
+		atalho     sql.NullInt64
+	}
+	produtos := []linhaProduto{}
+	for pRows.Next() {
+		var p linhaProduto
+		if err := pRows.Scan(&p.nome, &p.preco, &p.tipo, &p.quantidade, &p.ativo, &p.grupo, &p.ordem, &p.atalho); err != nil {
+			pRows.Close()
+			return Evento{}, err
+		}
+		produtos = append(produtos, p)
+	}
+	if err := pRows.Close(); err != nil {
+		return Evento{}, err
+	}
+	for _, p := range produtos {
+		var gkey any // NULL quando o produto era "sem grupo"
+		if p.grupo.Valid {
+			gkey = grupoMap[p.grupo.Int64]
+		}
+		akey := atalhoKey(int64(0)) // NULL
+		if p.atalho.Valid {
+			akey = p.atalho.Int64
+		}
+		if _, err := tx.Exec(`INSERT INTO produtos
+			(evento_id, nome, preco, estoque_tipo, quantidade, ativo, grupo_id, ordem, atalho)
+			VALUES (?,?,?,?,?,?,?,?,?)`,
+			novoID, p.nome, p.preco, p.tipo, p.quantidade, p.ativo, gkey, p.ordem, akey); err != nil {
+			return Evento{}, err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return Evento{}, err
+	}
+	return r.GetEvento(novoID)
 }
 
 // =============================================================
@@ -903,6 +1017,29 @@ func (r *repo) ResumoEvento(eventoID int64) (ResumoEvento, error) {
 		WHERE p.evento_id = ? AND p.total > 0 AND p.cancelado_em IS NULL AND pi.produto_id IS NOT NULL`, eventoID).
 		Scan(&res.NumProdutosVendidos); err != nil {
 		return res, err
+	}
+	// Hora em que o eixo do gráfico deve começar, para respeitar a linha do
+	// tempo quando a noite cruza a meia-noite: se a 1ª e a última venda caíram em
+	// dias diferentes, o eixo começa na hora da 1ª venda (festa 14h→01h mostra
+	// 14h…23h, 0h, 1h); se tudo foi no mesmo dia, começa em 0h como de costume.
+	res.VendasInicioHora = 0
+	var minEm, maxEm sql.NullString
+	if err := r.db.QueryRow(`SELECT MIN(criado_em), MAX(criado_em) FROM pedidos
+		WHERE evento_id = ? AND total > 0 AND cancelado_em IS NULL`, eventoID).
+		Scan(&minEm, &maxEm); err != nil {
+		return res, err
+	}
+	if minEm.Valid && maxEm.Valid {
+		const layout = "2006-01-02 15:04:05" // datetime('now','localtime') no SQLite
+		ini, errIni := time.Parse(layout, minEm.String)
+		fim, errFim := time.Parse(layout, maxEm.String)
+		if errIni == nil && errFim == nil {
+			y1, m1, d1 := ini.Date()
+			y2, m2, d2 := fim.Date()
+			if y1 != y2 || m1 != m2 || d1 != d2 {
+				res.VendasInicioHora = int64(ini.Hour())
+			}
+		}
 	}
 	// Histograma por hora do dia (0–23), zerado onde não houve venda.
 	porHora := make([]HoraVendas, 24)

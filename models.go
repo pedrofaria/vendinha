@@ -199,5 +199,6 @@ type ResumoEvento struct {
 	ReceitaTotal        int64        `json:"receitaTotal"`        // soma dos totais dos pedidos fechados (centavos)
 	NumPedidos          int64        `json:"numPedidos"`          // nº de vendas fechadas
 	NumProdutosVendidos int64        `json:"numProdutosVendidos"` // unidades de produto vendidas (sem cartelas)
-	VendasPorHora       []HoraVendas `json:"vendasPorHora"`       // histograma por hora do dia (0–23)
+	VendasInicioHora    int64        `json:"vendasInicioHora"`     // hora do dia (0–23) em que o eixo do gráfico começa; >0 quando a noite cruzou a meia-noite
+	VendasPorHora       []HoraVendas `json:"vendasPorHora"`        // histograma por hora do dia (0–23)
 }

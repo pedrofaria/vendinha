@@ -47,6 +47,15 @@ func (a *App) DeleteEvento(id int64) error {
 	return r.DeleteEvento(id)
 }
 
+// ClonarEvento duplica o evento (com grupos e produtos), sem pedidos/contas.
+func (a *App) ClonarEvento(id int64) (Evento, error) {
+	r, err := a.repoOrErr()
+	if err != nil {
+		return Evento{}, err
+	}
+	return r.ClonarEvento(id)
+}
+
 // ---- Cartelas ----
 // ListCartelas devolve o catálogo fixo de cartelas (R$ 10/20/50/100) com o
 // layout ASCII de cada uma (lido dos arquivos embutidos cartelas/*.txt).
