@@ -20,6 +20,13 @@ const { isDark, toggle } = useColorMode()
           >
             Eventos
           </RouterLink>
+          <RouterLink
+            to="/config"
+            class="rounded-md px-2.5 py-1.5 text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+            active-class="bg-emerald-50 font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+          >
+            Configurações
+          </RouterLink>
         </nav>
       </div>
       <button
