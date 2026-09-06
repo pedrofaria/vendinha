@@ -15,15 +15,18 @@ const error = ref('')
 const showModal = ref(false)
 const editing = ref<Evento | null>(null)
 const formNome = ref('')
+const formVendeCartela = ref(false)
 
 function openNew() {
   editing.value = null
   formNome.value = ''
+  formVendeCartela.value = false
   showModal.value = true
 }
 function openEdit(e: Evento) {
   editing.value = e
   formNome.value = e.nome
+  formVendeCartela.value = e.vendeCartela
   showModal.value = true
 }
 
@@ -45,9 +48,9 @@ async function save() {
   error.value = ''
   try {
     if (editing.value) {
-      await api().UpdateEvento(editing.value.id, nome, editing.value.ativo)
+      await api().UpdateEvento(editing.value.id, nome, editing.value.ativo, formVendeCartela.value)
     } else {
-      await api().CreateEvento(nome)
+      await api().CreateEvento(nome, formVendeCartela.value)
     }
     showModal.value = false
     await load()
@@ -59,7 +62,7 @@ async function save() {
 async function toggleAtivo(e: Evento) {
   error.value = ''
   try {
-    await api().UpdateEvento(e.id, e.nome, !e.ativo)
+    await api().UpdateEvento(e.id, e.nome, !e.ativo, e.vendeCartela)
     await load()
   } catch (err) {
     error.value = errMsg(err)
@@ -111,8 +114,14 @@ onMounted(load)
       >
         <button class="min-w-0 flex-1 text-left" type="button" @click="router.push(`/eventos/${e.id}`)">
           <div class="truncate text-base font-medium text-neutral-900 dark:text-neutral-100">{{ e.nome }}</div>
-          <div class="text-xs text-neutral-400">
-            {{ e.ativo ? 'Ativo' : 'Inativo' }} · criado em {{ dtBR(e.criadoEm) }}
+          <div class="mt-0.5 flex items-center gap-2">
+            <span class="text-xs text-neutral-400">
+              {{ e.ativo ? 'Ativo' : 'Inativo' }} · criado em {{ dtBR(e.criadoEm) }}
+            </span>
+            <span v-if="e.vendeCartela"
+              class="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
+              Cartelas
+            </span>
           </div>
         </button>
         <div class="flex shrink-0 items-center gap-1.5">
@@ -121,7 +130,7 @@ onMounted(load)
             Vender
           </UButton>
           <UButton color="primary" variant="outline" icon="i-lucide-package" size="sm" title="Gerenciar produtos"
-            @click="router.push(`/eventos/${e.id}`)">
+            @click="router.push(`/eventos/${e.id}/produtos`)">
             Produtos
           </UButton>
           <UButton color="neutral" variant="ghost" :icon="e.ativo ? 'i-lucide-eye-off' : 'i-lucide-eye'" size="sm"
@@ -139,6 +148,13 @@ onMounted(load)
           <UFormField label="Nome do evento">
             <UInput v-model="formNome" placeholder="Ex.: Retiro de Carnaval 2026" size="lg" autofocus />
           </UFormField>
+          <div class="flex items-center justify-between gap-3 rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
+            <div class="min-w-0">
+              <p class="text-sm font-medium text-neutral-900 dark:text-neutral-100">Vender cartelas</p>
+              <p class="text-xs text-neutral-500">Cartelas de raspadinha (R$ 10, 20, 50 e 100) disponíveis no PDV deste evento.</p>
+            </div>
+            <USwitch v-model="formVendeCartela" aria-label="Vender cartelas neste evento" />
+          </div>
         </form>
       </template>
       <template #footer>
